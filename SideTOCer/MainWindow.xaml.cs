@@ -163,6 +163,8 @@ namespace SideTOCer
 
                 root.querySelectorAll('pre').forEach(pre => {
                     if (pre.closest('.code-block-wrapper')) return;
+                    if (pre.classList.contains('mermaid') || pre.querySelector('code.language-mermaid')) return;
+                    if (pre.closest('.mermaid')) return;
 
                     const wrapper = document.createElement('div');
                     wrapper.className = 'code-block-wrapper';
@@ -181,75 +183,6 @@ namespace SideTOCer
                     wrapper.appendChild(toolbar);
                     wrapper.appendChild(pre);
                 });
-            }
-
-            function ensureLightbox() {
-                let overlay = document.getElementById('image-lightbox-overlay');
-                if (overlay) return overlay;
-
-                overlay = document.createElement('div');
-                overlay.id = 'image-lightbox-overlay';
-                overlay.className = 'lightbox-overlay';
-                overlay.innerHTML = `
-                    <div class="lightbox-panel" role="dialog" aria-modal="true" aria-label="画像の拡大表示">
-                        <button type="button" class="lightbox-close" aria-label="閉じる">×</button>
-                        <img class="lightbox-image" alt="">
-                        <div class="lightbox-caption"></div>
-                    </div>`;
-                document.body.appendChild(overlay);
-
-                const close = () => closeLightbox();
-                overlay.addEventListener('click', e => {
-                    if (e.target === overlay) close();
-                });
-                overlay.querySelector('.lightbox-close')?.addEventListener('click', close);
-                document.addEventListener('keydown', e => {
-                    if (e.key === 'Escape') close();
-                });
-                return overlay;
-            }
-
-            function openLightbox(img) {
-                const overlay = ensureLightbox();
-                const panelImg = overlay.querySelector('.lightbox-image');
-                const caption = overlay.querySelector('.lightbox-caption');
-                if (!panelImg || !caption) return;
-
-                panelImg.src = img.currentSrc || img.src;
-                panelImg.alt = img.alt || '';
-                caption.textContent = img.alt || img.title || '';
-                panelImg.style.width = (img.naturalWidth * 2) + 'px';
-                panelImg.style.height = (img.naturalHeight * 2) + 'px';
-                overlay.classList.add('is-open');
-                document.body.style.overflow = 'hidden';
-            }
-
-            function closeLightbox() {
-                const overlay = document.getElementById('image-lightbox-overlay');
-                if (!overlay) return;
-                overlay.classList.remove('is-open');
-                document.body.style.overflow = '';
-                const panelImg = overlay.querySelector('.lightbox-image');
-                if (panelImg) {
-                    panelImg.style.width = '';
-                    panelImg.style.height = '';
-                }
-            }
-
-            function decorateImages() {
-                const root = document.getElementById('markdown-body') || document.querySelector('main') || document.body;
-                if (!root) return;
-
-                root.querySelectorAll('img').forEach(img => {
-                    if (img.closest('a[href]')) return;
-
-                    img.classList.add('lightbox-enabled');
-                    if (img.dataset.lightboxBound === '1') return;
-                    img.dataset.lightboxBound = '1';
-                    img.addEventListener('click', () => openLightbox(img));
-                });
-
-                ensureLightbox();
             }
             """;
 
@@ -312,6 +245,18 @@ namespace SideTOCer
                 if (!root) return;
 
                 root.querySelectorAll('img').forEach(img => {
+                    let retries = 0;
+                    const setHalfWidth = () => {
+                        if (img.naturalWidth) {
+                            img.style.setProperty('--natural-half-width', (img.naturalWidth / 2) + 'px');
+                        } else if (retries < 20) {
+                            retries++;
+                            setTimeout(setHalfWidth, 50);
+                        }
+                    };
+                    img.addEventListener('load', setHalfWidth);
+                    setHalfWidth();
+
                     if (img.closest('a[href]')) return;
 
                     img.classList.add('lightbox-enabled');
@@ -330,11 +275,12 @@ namespace SideTOCer
             <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width,initial-scale=1.0">
+            <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
             <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap');
             *{box-sizing:border-box;margin:0;padding:0}
-            html,body{height:100%;overflow-y:auto}
-            body{font-family:'Noto Sans JP',sans-serif;background:#ffffff;color:#1a1a1a;padding:36px 48px;max-width:900px}
+            html{height:100%;overflow-y:auto}
+            body{height:100%;font-family:'Noto Sans JP',sans-serif;background:#ffffff;color:#1a1a1a;padding:36px 48px;max-width:900px}
             h1,h2,h3,h4,h5,h6{color:#1a1a1a;scroll-margin-top:20px;line-height:1.4}
             h1{font-size:1.9em;font-weight:700;margin:0 0 20px;padding-bottom:10px;border-bottom:2px solid #cccccc}
             h2{font-size:1.4em;font-weight:700;margin:36px 0 14px;padding-left:10px;border-left:4px solid #1a56db}
@@ -360,7 +306,7 @@ namespace SideTOCer
             td{border:1px solid #cccccc;padding:9px 14px}
             tr:nth-child(even) td{background:#f8f8f8}
             img{max-width:100%;height:auto}
-            body.half-image img:not(.lightbox-image){max-width:50%}
+            body.half-image img:not(.lightbox-image){max-width:100% !important;width:min(var(--natural-half-width, 100%), 50%) !important;height:auto !important}
             details{border:1px solid #cccccc;border-radius:6px;margin:16px 0;background:#fafafa;overflow:hidden}
             details[open]{background:#ffffff}
             summary{padding:12px 16px;font-weight:700;cursor:pointer;color:#1a56db;list-style:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid transparent}
@@ -402,6 +348,14 @@ namespace SideTOCer
             .auto-numbering.h2-base h3::before { counter-increment: h3; content: counter(h2) "." counter(h3) " "; }
             .auto-numbering.h2-base h4 { counter-reset: h5; }
             .auto-numbering.h2-base h4::before { counter-increment: h4; content: counter(h2) "." counter(h3) "." counter(h4) " "; }
+
+            /* Mermaid 描画用の特別スタイル */
+            pre.mermaid {
+                background: none !important;
+                border: none !important;
+                padding: 0 !important;
+                overflow: visible !important;
+            }
 
             /* ダークモードスタイル */
             body.dark-mode { background: #1a1a1a; color: #f0f0f0; }
@@ -506,6 +460,59 @@ namespace SideTOCer
 
             {{CODE_BLOCK_SCRIPT}}
             {{IMAGE_LIGHTBOX_SCRIPT}}
+
+            function initMermaid() {
+                if (typeof mermaid !== 'undefined') {
+                    const isDark = document.body.classList.contains('dark-mode');
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: isDark ? 'dark' : 'default',
+                        securityLevel: 'loose'
+                    });
+                }
+            }
+
+            async function renderMermaidDiagrams() {
+                if (typeof mermaid === 'undefined') return;
+                try {
+                    document.querySelectorAll('pre.mermaid, pre>code.language-mermaid').forEach(el => {
+                        let text = "";
+                        let target = el;
+                        if (el.tagName === "CODE") {
+                            text = el.textContent;
+                            target = el.parentElement;
+                        } else {
+                            text = el.textContent;
+                        }
+
+                        let replacementTarget = target;
+                        if (target.parentNode && target.parentNode.classList.contains('code-block-wrapper')) {
+                            replacementTarget = target.parentNode;
+                        }
+
+                        const div = document.createElement('div');
+                        div.className = 'mermaid';
+                        div.textContent = text;
+                        replacementTarget.parentNode.replaceChild(div, replacementTarget);
+                    });
+
+                    document.querySelectorAll('.mermaid').forEach(m => {
+                        const wrapper = m.closest('.code-block-wrapper');
+                        if (wrapper) {
+                            wrapper.parentNode.replaceChild(m, wrapper);
+                        }
+                        m.querySelectorAll('.code-block-toolbar, .code-copy-btn').forEach(tb => tb.remove());
+                    });
+
+                    initMermaid();
+                    await mermaid.run({
+                        querySelector: '.mermaid',
+                        suppressErrors: true
+                    });
+                } catch (e) {
+                    console.error("Mermaid render error:", e);
+                }
+            }
 
             function scrollToMatch(index) {
                 try {
@@ -624,7 +631,7 @@ namespace SideTOCer
             {
                 Editor.Text = GetSampleMarkdown();
             }
-            
+
             _isDirty = false;
         }
 
@@ -771,7 +778,7 @@ namespace SideTOCer
         {
             await Preview.EnsureCoreWebView2Async();
             Preview.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            
+
             // 仮想サーバーの設定（画像のオンデマンド読み込み用）
             Preview.CoreWebView2.AddWebResourceRequestedFilter("https://sidetocer.app/*", CoreWebView2WebResourceContext.All);
             Preview.CoreWebView2.WebResourceRequested += CoreWebView2_WebResourceRequested;
@@ -888,7 +895,7 @@ namespace SideTOCer
                     // 自動検索同期の場合のみ、検索入力を続けられるようにフォーカスを戻す
                     if (isSearchSync && _isSearching)
                     {
-                        await Task.Delay(30); 
+                        await Task.Delay(30);
                         SearchBox.Focus();
                     }
                 }
@@ -1036,6 +1043,10 @@ namespace SideTOCer
                                 document.body.classList.add('dark-mode');
                             } else {
                                 document.body.classList.remove('dark-mode');
+                            }
+
+                            if (typeof renderMermaidDiagrams === 'function') {
+                                renderMermaidDiagrams();
                             }
 
                             // 画像サイズ半減モードの制御
@@ -1231,7 +1242,7 @@ namespace SideTOCer
         private string? ResolveFullPath(string src)
         {
             if (string.IsNullOrWhiteSpace(src)) return null;
-            
+
             // クエリパラメータやフラグメントを削除し、パスを正規化
             var pathPart = src.Split('#')[0].Split('?')[0].Trim();
             try { pathPart = Uri.UnescapeDataString(pathPart).Replace('/', Path.DirectorySeparatorChar); }
@@ -1381,7 +1392,7 @@ namespace SideTOCer
                 "td{border:1px solid #cccccc;padding:9px 14px}" +
                 "tr:nth-child(even) td{background:#f8f8f8}" +
                 "img{max-width:100%;height:auto}" +
-                "body.half-image img:not(.lightbox-image){max-width:50%}" +
+                "body.half-image img:not(.lightbox-image){max-width:100% !important;width:min(var(--natural-half-width, 100%), 50%) !important;height:auto !important}" +
                 "details{border:1px solid #cccccc;border-radius:6px;margin:16px 0;background:#fafafa;overflow:hidden}" +
                 "details[open]{background:#ffffff}" +
                 "summary{padding:12px 16px;font-weight:700;cursor:pointer;color:#1a56db;list-style:none;display:flex;align-items:center;gap:8px;border-bottom:1px solid transparent}" +
@@ -1441,7 +1452,8 @@ namespace SideTOCer
                 ".lightbox-caption{color:#f0f0f0;font-size:13px;line-height:1.5;text-align:center;max-width:96vw;overflow-wrap:anywhere}" +
                 ".lightbox-close{position:absolute;top:-12px;right:-12px;width:34px;height:34px;border:none;border-radius:999px;background:#fff;color:#111;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35)}" +
                 ".lightbox-close:hover{background:#e5e5e5}" +
-                "img.lightbox-enabled{cursor:zoom-in}";
+                "img.lightbox-enabled{cursor:zoom-in}" +
+                "pre.mermaid{background:none!important;border:none!important;padding:0!important;overflow:visible!important;}";
 
             var title = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
             var exportHtml = new StringBuilder();
@@ -1450,10 +1462,11 @@ namespace SideTOCer
             exportHtml.AppendLine("<head>");
             exportHtml.AppendLine("<meta charset=\"UTF-8\">");
             exportHtml.AppendLine("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">");
+            exportHtml.AppendLine("<script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\"></script>");
             exportHtml.AppendLine($"<title>{title}</title>");
             exportHtml.AppendLine($"<style>{exportCss}</style>");
             exportHtml.AppendLine("</head>");
-            
+
             var bodyClassList = new List<string>();
             var counterReset = "none";
             if (OptAutoNumber!.IsChecked == true)
@@ -1474,16 +1487,16 @@ namespace SideTOCer
             {
                 bodyClassList.Add("half-image");
             }
-            
+
             var bodyClass = bodyClassList.Count > 0 ? $" class=\"{string.Join(" ", bodyClassList)}\"" : "";
             var bodyStyle = bodyClassList.Count > 0 ? $" style=\"counter-reset: {counterReset};\"" : "";
             exportHtml.AppendLine($"<body{bodyClass}{bodyStyle}>");
-            
+
             // 目次サイドバーの開始
             exportHtml.AppendLine("<nav>");
             exportHtml.AppendLine("<div class=\"nav-title\">目次</div>");
             exportHtml.AppendLine($"<ul>{tocHtml}</ul>");
-            
+
             // アコーディオン一括操作ボタンを目次の下に配置
             if (OptAccordion!.IsChecked == true)
             {
@@ -1563,8 +1576,56 @@ namespace SideTOCer
             exportHtml.AppendLine("setupTocScrollSpy();");
             exportHtml.AppendLine("decorateCodeBlocks();");
             exportHtml.AppendLine("decorateImages();");
+            exportHtml.AppendLine("function initMermaid() {");
+            exportHtml.AppendLine("  if (typeof mermaid !== 'undefined') {");
+            exportHtml.AppendLine("    const isDark = document.body.classList.contains('dark-mode');");
+            exportHtml.AppendLine("    mermaid.initialize({");
+            exportHtml.AppendLine("      startOnLoad: false,");
+            exportHtml.AppendLine("      theme: isDark ? 'dark' : 'default',");
+            exportHtml.AppendLine("      securityLevel: 'loose'");
+            exportHtml.AppendLine("    });");
+            exportHtml.AppendLine("  }");
+            exportHtml.AppendLine("}");
+            exportHtml.AppendLine("async function renderMermaidDiagrams() {");
+            exportHtml.AppendLine("  if (typeof mermaid === 'undefined') return;");
+            exportHtml.AppendLine("  try {");
+            exportHtml.AppendLine("    document.querySelectorAll('pre.mermaid, pre>code.language-mermaid').forEach(el => {");
+            exportHtml.AppendLine("      let text = '';");
+            exportHtml.AppendLine("      let target = el;");
+            exportHtml.AppendLine("      if (el.tagName === 'CODE') {");
+            exportHtml.AppendLine("        text = el.textContent;");
+            exportHtml.AppendLine("        target = el.parentElement;");
+            exportHtml.AppendLine("      } else {");
+            exportHtml.AppendLine("        text = el.textContent;");
+            exportHtml.AppendLine("      }");
+            exportHtml.AppendLine("      let replacementTarget = target;");
+            exportHtml.AppendLine("      if (target.parentNode && target.parentNode.classList.contains('code-block-wrapper')) {");
+            exportHtml.AppendLine("        replacementTarget = target.parentNode;");
+            exportHtml.AppendLine("      }");
+            exportHtml.AppendLine("      const div = document.createElement('div');");
+            exportHtml.AppendLine("      div.className = 'mermaid';");
+            exportHtml.AppendLine("      div.textContent = text;");
+            exportHtml.AppendLine("      replacementTarget.parentNode.replaceChild(div, replacementTarget);");
+            exportHtml.AppendLine("    });");
+            exportHtml.AppendLine("    document.querySelectorAll('.mermaid').forEach(m => {");
+            exportHtml.AppendLine("      const wrapper = m.closest('.code-block-wrapper');");
+            exportHtml.AppendLine("      if (wrapper) {");
+            exportHtml.AppendLine("        wrapper.parentNode.replaceChild(m, wrapper);");
+            exportHtml.AppendLine("      }");
+            exportHtml.AppendLine("      m.querySelectorAll('.code-block-toolbar, .code-copy-btn').forEach(tb => tb.remove());");
+            exportHtml.AppendLine("    });");
+            exportHtml.AppendLine("    initMermaid();");
+            exportHtml.AppendLine("    await mermaid.run({");
+            exportHtml.AppendLine("      querySelector: '.mermaid',");
+            exportHtml.AppendLine("      suppressErrors: true");
+            exportHtml.AppendLine("    });");
+            exportHtml.AppendLine("  } catch (e) {");
+            exportHtml.AppendLine("    console.error('Mermaid render error:', e);");
+            exportHtml.AppendLine("  }");
+            exportHtml.AppendLine("}");
+            exportHtml.AppendLine("renderMermaidDiagrams();");
             exportHtml.AppendLine("</script>");
-            
+
             exportHtml.AppendLine("</body>");
             exportHtml.AppendLine("</html>");
 
@@ -1643,7 +1704,7 @@ namespace SideTOCer
             _base64Cache.Clear();
             _currentMarkdownPath = path;
             _markdownBaseDirectory = Path.GetDirectoryName(path);
-            
+
             Editor.Text = File.ReadAllText(path, Encoding.UTF8);
             _isDirty = false;
             UpdateDocumentStatus();
@@ -1773,7 +1834,7 @@ namespace SideTOCer
             if (SearchBar != null) SearchBar.Visibility = Visibility.Visible;
             if (ReplaceControls != null) ReplaceControls.Visibility = showReplace ? Visibility.Visible : Visibility.Collapsed;
             if (SearchNavigationControls != null) SearchNavigationControls.Visibility = showReplace ? Visibility.Collapsed : Visibility.Visible;
-            
+
             SearchBox.Focus();
             SearchBox.SelectAll();
         }
@@ -2127,7 +2188,15 @@ namespace SideTOCer
                 "URLリンクの例: [GitHub - OtabiHirohito](https://github.com/OtabiHirohito \"制作者\")\n\n" +
                 "### 注釈\n\n" +
                 "注釈[^1]もサポートしています。\n\n" +
-                "[^1]: ここに注釈の内容が表示されます。\n";
+                "[^1]: ここに注釈の内容が表示されます。\n\n" +
+                "### Mermaid記法\n\n" +
+                "Mermaid記法によるダイアグラムの描画に対応しています。以下のように記述します。\n\n" +
+                "```mermaid\n" +
+                "graph TD\n" +
+                "    A[スタート] --> B{選択}\n" +
+                "    B -- はい --> C[成功]\n" +
+                "    B -- いいえ --> D[失敗]\n" +
+                "```\n";
         }
     }
 }
